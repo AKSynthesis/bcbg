@@ -8,7 +8,7 @@ const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
 
 // /app/* = customer portal. Requires a signed-in user, org membership is
 // irrelevant here — a stylist could even use /app to book with a peer.
-const isCustomerRoute = createRouteMatcher(["/app(.*)"]);
+const isCustomerRoute = createRouteMatcher(["/app(.*)", "/onboarding(.*)"]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (isAdminRoute(req)) {
