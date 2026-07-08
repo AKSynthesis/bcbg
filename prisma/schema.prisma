@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Stylist = tenant. Maps 1:1 to a Clerk Organization.
+// Every tenant-owned table below carries a stylistId FK for isolation.
+// ---------------------------------------------------------------------------
+model Stylist {
+  id          String   @id @default(cuid())
+  clerkOrgId  String   @unique
+  slug        String   @unique // used for public booking page: /[stylistSlug]
+  businessName String
+  timezone    String   // IANA tz name, e.g. "America/Chicago" — used to convert
+                        // UTC-stored bookings to local time for display
+
+  // Stripe Connect (deposits charged directly to this stylist)
+  stripeConnectAccountId String?
+
+  // Stripe Billing (this stylist's own subscription to BCBG)
+  stripeCustomerId       String?
+  stripeSubscriptionId   String?
+  subscriptionStatus     SubscriptionStatus @default(TRIALING)
+  trialEndsAt            DateTime?          @db.Timestamptz(3)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  services               Service[]
+  availabilityRules      AvailabilityRule[]
+  availabilityExceptions AvailabilityException[]
+  bookings               Booking[]
+
+  @@index([slug])
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE   // restricted-not-locked: payment lapsed, Smart Retries in progress
+  CANCELED
+}
+
+// ---------------------------------------------------------------------------
+// Customer = global. Not tenant-scoped — one customer can book with many
+// stylists. Connected to Clerk as an individual user (customer portal).
+// ---------------------------------------------------------------------------
+model Customer {
+  id            String  @id @default(cuid())
+  clerkUserId   String  @unique
+  email         String  @unique
+  phone         String?
+  smsOptIn      Boolean @default(false) // TCPA: must be explicit, never default true
+  smsOptInAt    DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  bookings Booking[]
+}
+
+// ---------------------------------------------------------------------------
+// Service = a bookable offering, owned by one Stylist.
+// ---------------------------------------------------------------------------
+model Service {
+  id       String @id @default(cuid())
+  stylistId String
+  stylist  Stylist @relation(fields: [stylistId], references: [id], onDelete: Cascade)
+
+  name              String
+  durationMinutes   Int     // active appointment time
+  bufferBeforeMinutes Int   @default(0)
+  bufferAfterMinutes  Int   @default(0)
+  priceCents        Int     // store money as integer cents, never float
+  depositPercentage Int     @default(0) // 0-100, stylist-defined
+  active            Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  bookings Booking[]
+
+  @@index([stylistId])
+}
+
+// ---------------------------------------------------------------------------
+// AvailabilityRule = recurring weekly hours, e.g. "every Tuesday 9am-5pm".
+// Times are minutes-from-midnight (date-independent) in the Stylist's own
+// timezone — NOT UTC, since these are wall-clock recurring rules, not instants.
+// ---------------------------------------------------------------------------
+model AvailabilityRule {
+  id        String  @id @default(cuid())
+  stylistId String
+  stylist   Stylist @relation(fields: [stylistId], references: [id], onDelete: Cascade)
+
+  dayOfWeek     Int // 0 = Sunday ... 6 = Saturday
+  startMinutes  Int // minutes from midnight, e.g. 540 = 9:00am
+  endMinutes    Int // e.g. 1020 = 5:00pm
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([stylistId, dayOfWeek])
+}
+
+// ---------------------------------------------------------------------------
+// AvailabilityException = one-off override for a specific calendar date.
+// If isClosed = true, the stylist is unavailable all day (times ignored).
+// If isClosed = false, startMinutes/endMinutes REPLACE that date's normal
+// weekly rule (e.g. shorter hours on a holiday-adjacent day).
+// ---------------------------------------------------------------------------
+model AvailabilityException {
+  id        String  @id @default(cuid())
+  stylistId String
+  stylist   Stylist @relation(fields: [stylistId], references: [id], onDelete: Cascade)
+
+  date          DateTime @db.Date // calendar date in the stylist's own timezone
+  isClosed      Boolean  @default(true)
+  startMinutes  Int?     // required if isClosed = false
+  endMinutes    Int?     // required if isClosed = false
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([stylistId, date]) // one exception row per date per stylist
+  @@index([stylistId, date])
+}
+
+// ---------------------------------------------------------------------------
+// Booking = the bridge entity between Stylist (tenant) and Customer (global).
+// startAt/endAt are true instants, stored UTC via timestamptz.
+// The (stylistId, startAt, endAt) index backs the overlap check used in the
+// atomic double-booking-prevention transaction.
+// ---------------------------------------------------------------------------
+model Booking {
+  id         String  @id @default(cuid())
+  stylistId  String
+  stylist    Stylist @relation(fields: [stylistId], references: [id], onDelete: Restrict)
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  startAt DateTime @db.Timestamptz(3) // includes service duration + buffers
+  endAt   DateTime @db.Timestamptz(3)
+
+  status BookingStatus @default(PENDING)
+
+  depositAmountCents Int     @default(0)
+  depositPaid        Boolean @default(false)
+  stripePaymentIntentId String?
+
+  // Snapshot of the stylist's cancellation policy AT BOOKING TIME — the
+  // policy text/terms on the stylist's profile can change later, but what
+  // applies to this booking must stay fixed to what the customer agreed to.
+  cancellationPolicySnapshot String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([stylistId, startAt, endAt]) // overlap-check index
+  @@index([customerId])
+}
+
+enum BookingStatus {
+  PENDING    // created, awaiting deposit/confirmation
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
