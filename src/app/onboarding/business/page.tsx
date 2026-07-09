@@ -13,7 +13,7 @@ export default async function OnboardingBusinessPage() {
     // Already has an active organization — no need to create another.
     // (A stylist creating a second business is a real future feature, but
     // not part of this onboarding flow.)
-    redirect("/admin");
+    redirect("/onboarding/timezone");
   }
 
   return (
