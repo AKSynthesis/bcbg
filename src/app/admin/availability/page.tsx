@@ -75,7 +75,11 @@ export default async function AvailabilityPage() {
               className="mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
             >
               {DAY_NAMES.map((name, index) => (
-                <option key={index} value={index}>
+                <option
+                    key={index} 
+                    value={index}
+                    className="text-black"
+                >
                   {name}
                 </option>
               ))}
