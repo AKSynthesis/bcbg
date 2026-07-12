@@ -1,8 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getCurrentStylist } from "@/lib/current-stylist";
 
 export default async function AdminLayout({
   children,
@@ -13,11 +12,7 @@ export default async function AdminLayout({
   // /admin, but it can't guarantee a Stylist row exists yet — that's a
   // DB fact, not a Clerk session fact. This layout is the actual source
   // of truth for "has this stylist finished onboarding."
-  const { orgId } = await auth();
-
-  const stylist = orgId
-    ? await prisma.stylist.findUnique({ where: { clerkOrgId: orgId } })
-    : null;
+  const stylist = await getCurrentStylist();
 
   if (!stylist) {
     redirect("/onboarding/timezone");

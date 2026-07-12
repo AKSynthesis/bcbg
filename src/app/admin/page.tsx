@@ -1,15 +1,12 @@
-import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/prisma";
+import { getCurrentStylist } from "@/lib/current-stylist";
 
 export default async function AdminOverviewPage() {
   // Re-fetched here rather than threaded down from the layout — a single
   // indexed lookup is cheap, and it keeps this page independently correct
   // if the layout's data-fetching ever changes. Worth revisiting with
   // React's cache() if this pattern repeats across more admin pages.
-  const { orgId } = await auth();
-  const stylist = await prisma.stylist.findUniqueOrThrow({
-    where: { clerkOrgId: orgId! },
-  });
+  const stylist = await getCurrentStylist();
+  if (!stylist) return null;
 
   const bookingUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/${stylist.slug}`;
 
