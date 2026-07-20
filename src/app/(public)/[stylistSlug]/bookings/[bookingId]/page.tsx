@@ -30,6 +30,25 @@ export default async function BookingConfirmedPage({
   const apptStart = new Date(booking.startAt.getTime() + booking.service.bufferBeforeMinutes * 60_000);
   const localDateTime = format(toZonedTime(apptStart, stylist.timezone), "EEEE, MMMM d 'at' h:mm a");
 
+  // PENDING here means a deposit is required and Stripe hasn't confirmed
+  // payment yet -- either the webhook just hasn't landed (usually
+  // seconds), or the customer navigated back without actually paying.
+  // Auto-refresh via meta tag is a zero-JS way to poll for the webhook
+  // catching up; if it never does, the booking just stays PENDING and
+  // the slot isn't confirmed (by design -- see the webhook handler).
+  if (booking.status === "PENDING") {
+    return (
+      <div className="mx-auto max-w-md px-6 py-12 text-center">
+        <meta httpEquiv="refresh" content="3" />
+        <h1 className="text-2xl font-semibold">Finishing up...</h1>
+        <p className="mt-2 text-gray-600">
+          We&apos;re confirming your payment for {booking.service.name} with {stylist.businessName}.
+          This page will update automatically.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-md px-6 py-12 text-center">
       <h1 className="text-2xl font-semibold">You&apos;re booked!</h1>
@@ -39,8 +58,7 @@ export default async function BookingConfirmedPage({
       <p className="mt-1 text-gray-600">{localDateTime}</p>
       {booking.depositAmountCents > 0 && (
         <p className="mt-4 text-sm text-gray-500">
-          A ${(booking.depositAmountCents / 100).toFixed(2)} deposit will be required to secure this
-          appointment.
+          ${(booking.depositAmountCents / 100).toFixed(2)} deposit paid.
         </p>
       )}
     </div>

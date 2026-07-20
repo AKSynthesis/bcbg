@@ -23,6 +23,7 @@ export default async function AdminLayout({
     { href: "/admin/services", label: "Services" },
     { href: "/admin/availability", label: "Availability" },
     { href: "/admin/bookings", label: "Bookings" },
+    { href: "/admin/payments", label: "Payments" },
   ];
 
   return (

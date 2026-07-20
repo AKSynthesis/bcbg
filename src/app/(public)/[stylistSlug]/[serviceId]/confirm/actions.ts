@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
 import { ensureCurrentCustomer } from "@/lib/current-customer";
 
 export async function createBooking(stylistSlug: string, serviceId: string, slot: string) {
@@ -26,6 +27,19 @@ export async function createBooking(stylistSlug: string, serviceId: string, slot
   );
 
   const depositAmountCents = Math.round((service.priceCents * service.depositPercentage) / 100);
+
+  // Deposit collection only applies if the service actually requires one
+  // AND the stylist has a Stripe account that can accept charges. If a
+  // stylist sets a deposit % before connecting Stripe, bookings fall back
+  // to auto-confirming without payment -- not ideal, but avoids blocking
+  // bookings entirely on an incomplete Stripe setup. Worth revisiting:
+  // maybe Services CRUD should prevent depositPercentage > 0 until
+  // Stripe is connected.
+  let collectsDeposit = false;
+  if (depositAmountCents > 0 && stylist.stripeConnectAccountId) {
+    const account = await stripe.accounts.retrieve(stylist.stripeConnectAccountId);
+    collectsDeposit = account.charges_enabled;
+  }
 
   let bookingId: string;
   try {
@@ -58,13 +72,13 @@ export async function createBooking(stylistSlug: string, serviceId: string, slot
             serviceId: service.id,
             startAt: blockStart,
             endAt: blockEnd,
-            // Deposits aren't actually collected yet (Stripe isn't wired
-            // up) -- every booking is auto-confirmed for now regardless
-            // of depositPercentage. Revisit when Stripe is added:
-            // services with a deposit requirement should create a
-            // PENDING booking that only becomes CONFIRMED after payment
-            // succeeds.
-            status: "CONFIRMED",
+            // If a deposit needs collecting, the booking stays PENDING
+            // until the Stripe webhook confirms payment -- see
+            // src/app/api/webhooks/stripe/route.ts for the transition
+            // to CONFIRMED. KNOWN GAP: an abandoned Checkout leaves this
+            // slot blocked as PENDING indefinitely -- there's no
+            // stale-booking expiry job yet. Worth adding before launch.
+            status: collectsDeposit ? "PENDING" : "CONFIRMED",
             depositAmountCents,
             depositPaid: false,
           },
@@ -83,5 +97,35 @@ export async function createBooking(stylistSlug: string, serviceId: string, slot
     throw err;
   }
 
-  redirect(`/${stylistSlug}/bookings/${bookingId}`);
+  if (!collectsDeposit) {
+    redirect(`/${stylistSlug}/bookings/${bookingId}`);
+  }
+
+  // Deposit required: the booking is already secured (PENDING) at this
+  // point -- Checkout just collects payment. The webhook, not this
+  // redirect, is what actually confirms the booking; a customer could
+  // navigate to success_url without paying, so nothing here trusts that.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const checkoutSession = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [
+      {
+        price_data: {
+          currency: "usd",
+          unit_amount: depositAmountCents,
+          product_data: { name: `Deposit: ${service.name}` },
+        },
+        quantity: 1,
+      },
+    ],
+    payment_intent_data: {
+      transfer_data: { destination: stylist.stripeConnectAccountId! },
+      metadata: { bookingId },
+    },
+    metadata: { bookingId },
+    success_url: `${appUrl}/${stylistSlug}/bookings/${bookingId}`,
+    cancel_url: `${appUrl}/${stylistSlug}/${serviceId}/confirm?slot=${encodeURIComponent(slot)}`,
+  });
+
+  redirect(checkoutSession.url!);
 }
