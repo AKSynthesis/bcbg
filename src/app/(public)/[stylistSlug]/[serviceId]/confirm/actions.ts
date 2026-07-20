@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { ensureCurrentCustomer } from "@/lib/current-customer";
+import { sendBookingConfirmationEmail } from "@/lib/send-booking-confirmation";
 
 export async function createBooking(stylistSlug: string, serviceId: string, slot: string) {
   const customer = await ensureCurrentCustomer();

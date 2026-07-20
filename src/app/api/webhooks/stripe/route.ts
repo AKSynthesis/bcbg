@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+import { sendBookingConfirmationEmail } from "@/lib/send-booking-confirmation";
 
 export async function POST(request: NextRequest) {
   const signature = request.headers.get("stripe-signature");
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
       // to the booking page) is NOT trusted for this, since a customer
       // could navigate there without ever completing payment. Only
       // transition PENDING -> CONFIRMED here, from a verified webhook.
-      await prisma.booking.updateMany({
+      const result = await prisma.booking.updateMany({
         where: { id: bookingId, status: "PENDING" },
         data: {
           status: "CONFIRMED",
@@ -46,6 +47,14 @@ export async function POST(request: NextRequest) {
               : session.payment_intent?.id,
         },
       });
+
+      // Stripe (like Clerk) uses at-least-once delivery. Only send the
+      // email if THIS call is what actually flipped the booking to
+      // CONFIRMED (count > 0) -- otherwise a re-delivered webhook for an
+      // already-confirmed booking would send a duplicate confirmation.
+      if (result.count > 0) {
+        await sendBookingConfirmationEmail(bookingId);
+      }
       break;
     }
 
