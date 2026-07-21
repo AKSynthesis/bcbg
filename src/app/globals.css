@@ -1,26 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* BCBG brand tokens -- an appointment-ledger palette, not a generic
+     SaaS one. Warm kraft-paper ground, near-black ink, a wine accent
+     (salon-chair velvet) for primary actions, brass for small hardware
+     details (rules, tags, eyebrows). */
+  --color-ink: #211c18;
+  --color-paper: #ede3d3;
+  --color-paper-dark: #e1d5be;
+  --color-wine: #6b2737;
+  --color-wine-dark: #551e2c;
+  --color-brass: #a9834b;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-ink: var(--color-ink);
+  --color-paper: var(--color-paper);
+  --color-paper-dark: var(--color-paper-dark);
+  --color-wine: var(--color-wine);
+  --color-wine-dark: var(--color-wine-dark);
+  --color-brass: var(--color-brass);
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-plex-sans), Arial, Helvetica, sans-serif;
 }

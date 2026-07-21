@@ -3,9 +3,9 @@ import { Show, UserButton } from "@clerk/nextjs";
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-        <Link href="/" className="font-semibold">
+    <div className="flex flex-1 flex-col bg-paper text-ink">
+      <header className="flex items-center justify-between border-b border-ink/10 px-6 py-4">
+        <Link href="/" className="font-display text-lg font-semibold tracking-tight">
           BCBG
         </Link>
 
@@ -13,7 +13,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
           <UserButton />
         </Show>
         <Show when="signed-out">
-          <Link href="/sign-in" className="text-sm text-gray-600 hover:underline">
+          <Link href="/sign-in" className="text-sm text-ink/70 hover:text-ink hover:underline">
             Sign in
           </Link>
         </Show>

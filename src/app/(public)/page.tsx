@@ -1,65 +1,143 @@
-import Image from "next/image";
+import Link from "next/link";
+
+const scheduleMock = [
+  { time: "9:00", label: "Color + Cut", status: "booked" as const },
+  { time: "11:30", label: "Blowout", status: "open" as const },
+  { time: "1:00", label: "Trim", status: "booked" as const },
+  { time: "3:30", label: "Balayage", status: "open" as const },
+];
+
+const steps = [
+  {
+    n: "01",
+    title: "Open your page",
+    body: "Set your hours and services once. Your booking link is ready in minutes.",
+  },
+  {
+    n: "02",
+    title: "Clients book themselves",
+    body: "They pick an open time in their own timezone, and pay a deposit if you require one.",
+  },
+  {
+    n: "03",
+    title: "Everyone's reminded",
+    body: "Confirmations and reminders go out by email and text — automatically.",
+  },
+];
+
+const features = [
+  "Deposits via Stripe",
+  "Email & SMS reminders",
+  "No double-bookings",
+  "Your own booking page",
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="flex-1">
+      {/* Hero */}
+      <section className="mx-auto grid max-w-5xl gap-12 px-6 py-20 sm:py-28 lg:grid-cols-2 lg:items-center">
+        <div>
+          <p className="font-mono text-xs tracking-[0.2em] text-brass uppercase">
+            Bon chic, bon genre
           </p>
+          <h1 className="mt-4 font-display text-4xl leading-tight font-semibold tracking-tight sm:text-5xl">
+            Booking, kept in good form.
+          </h1>
+          <p className="mt-5 max-w-md text-base leading-7 text-ink/70">
+            One link for your chair. Clients pick a time, pay their deposit, and get reminded —
+            automatically.
+          </p>
+
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link
+              href="/sign-up"
+              className="rounded-sm bg-wine px-5 py-3 text-sm font-medium text-paper transition-colors hover:bg-wine-dark"
+            >
+              List your chair
+            </Link>
+            <Link
+              href="/sign-in"
+              className="text-sm font-medium text-ink/70 hover:text-ink hover:underline"
+            >
+              Sign in
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Signature element: a stylized day sheet, standing in for the
+            actual availability/slot picker the product is built on. */}
+        <div className="rounded-sm border border-ink/15 bg-paper-dark/60 p-6 shadow-[6px_6px_0_0_rgba(33,28,24,0.08)]">
+          <div className="flex items-baseline justify-between border-b border-ink/15 pb-3">
+            <p className="font-display text-lg italic">Tuesday</p>
+            <p className="font-mono text-xs text-ink/50">14 JUL</p>
+          </div>
+          <ul className="divide-y divide-ink/10">
+            {scheduleMock.map((slot) => (
+              <li key={slot.time} className="flex items-center justify-between py-3">
+                <div className="flex items-baseline gap-3">
+                  <span className="font-mono text-sm text-ink/50">{slot.time}</span>
+                  <span className="text-sm">{slot.label}</span>
+                </div>
+                <span
+                  className={
+                    slot.status === "booked"
+                      ? "font-mono text-xs tracking-wide text-brass uppercase"
+                      : "font-mono text-xs tracking-wide text-ink/40 uppercase"
+                  }
+                >
+                  {slot.status === "booked" ? "Booked" : "Open"}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
-      </main>
+      </section>
+
+      {/* How it works -- numbered because it IS a sequence: the order is
+          literally the order a stylist and their client move through. */}
+      <section className="border-t border-ink/10 bg-paper-dark/40">
+        <div className="mx-auto max-w-5xl px-6 py-16 sm:py-20">
+          <div className="grid gap-10 sm:grid-cols-3">
+            {steps.map((step) => (
+              <div key={step.n}>
+                <p className="font-mono text-sm text-brass">{step.n}</p>
+                <h2 className="mt-2 font-display text-xl font-semibold">{step.title}</h2>
+                <p className="mt-2 text-sm leading-6 text-ink/70">{step.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Feature strip */}
+      <section className="mx-auto max-w-5xl px-6 py-12">
+        <ul className="flex flex-wrap justify-center gap-x-8 gap-y-3 text-center">
+          {features.map((feature) => (
+            <li key={feature} className="font-mono text-xs tracking-wide text-ink/60 uppercase">
+              {feature}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* Final CTA */}
+      <section className="border-t border-ink/10 bg-wine text-paper">
+        <div className="mx-auto max-w-5xl px-6 py-16 text-center sm:py-20">
+          <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            Your chair, your hours, your terms.
+          </h2>
+          <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-paper/80">
+            Free to start. Connect Stripe when you&apos;re ready to collect deposits.
+          </p>
+          <Link
+            href="/sign-up"
+            className="mt-8 inline-block rounded-sm bg-paper px-5 py-3 text-sm font-medium text-ink transition-colors hover:bg-paper-dark"
+          >
+            List your chair
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }
