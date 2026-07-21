@@ -5,9 +5,46 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { ensureCurrentCustomer } from "@/lib/current-customer";
 import { sendBookingConfirmationEmail } from "@/lib/send-booking-confirmation";
+import { sendBookingConfirmationSms } from "@/lib/send-booking-confirmation-sms";
+import { normalizePhoneToE164 } from "@/lib/phone";
 
-export async function createBooking(stylistSlug: string, serviceId: string, slot: string) {
+export async function createBooking(
+  stylistSlug: string,
+  serviceId: string,
+  slot: string,
+  formData: FormData,
+) {
   const customer = await ensureCurrentCustomer();
+
+  // Only ever WRITE phone/smsOptIn forward, never revert opt-in to false
+  // just because this particular booking's checkbox was left unchecked --
+  // consent revocation should be an explicit action (e.g. replying STOP),
+  // not an implicit side effect of an unrelated form submission.
+  const rawPhone = formData.get("phone");
+  const smsOptInChecked = formData.get("smsOptIn") === "on";
+  if (smsOptInChecked) {
+    if (typeof rawPhone !== "string" || !rawPhone.trim()) {
+      throw new Error("A phone number is required to receive text confirmations.");
+    }
+    const normalizedPhone = normalizePhoneToE164(rawPhone);
+    if (!normalizedPhone) {
+      throw new Error("That doesn't look like a valid phone number.");
+    }
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: { phone: normalizedPhone, smsOptIn: true, smsOptInAt: new Date() },
+    });
+  } else if (typeof rawPhone === "string" && rawPhone.trim()) {
+    // Not opting in, but they did provide/update a phone number -- save
+    // it without touching smsOptIn.
+    const normalizedPhone = normalizePhoneToE164(rawPhone);
+    if (normalizedPhone) {
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: { phone: normalizedPhone },
+      });
+    }
+  }
 
   const stylist = await prisma.stylist.findUnique({ where: { slug: stylistSlug } });
   if (!stylist) throw new Error("Stylist not found.");
@@ -29,13 +66,6 @@ export async function createBooking(stylistSlug: string, serviceId: string, slot
 
   const depositAmountCents = Math.round((service.priceCents * service.depositPercentage) / 100);
 
-  // Deposit collection only applies if the service actually requires one
-  // AND the stylist has a Stripe account that can accept charges. If a
-  // stylist sets a deposit % before connecting Stripe, bookings fall back
-  // to auto-confirming without payment -- not ideal, but avoids blocking
-  // bookings entirely on an incomplete Stripe setup. Worth revisiting:
-  // maybe Services CRUD should prevent depositPercentage > 0 until
-  // Stripe is connected.
   let collectsDeposit = false;
   if (depositAmountCents > 0 && stylist.stripeConnectAccountId) {
     const account = await stripe.accounts.retrieve(stylist.stripeConnectAccountId);
@@ -46,14 +76,6 @@ export async function createBooking(stylistSlug: string, serviceId: string, slot
   try {
     const booking = await prisma.$transaction(
       async (tx) => {
-        // Atomic double-booking check: re-verify no overlapping booking
-        // exists for this stylist inside the SAME transaction that
-        // creates the new one. Serializable isolation is what actually
-        // makes this race-safe -- under the default (Read Committed),
-        // two concurrent requests could both pass this check before
-        // either commits. Under Serializable, Postgres detects the
-        // conflict and one of the two transactions fails with a
-        // serialization error, which we catch below.
         const overlapping = await tx.booking.findFirst({
           where: {
             stylistId: stylist.id,
@@ -73,12 +95,6 @@ export async function createBooking(stylistSlug: string, serviceId: string, slot
             serviceId: service.id,
             startAt: blockStart,
             endAt: blockEnd,
-            // If a deposit needs collecting, the booking stays PENDING
-            // until the Stripe webhook confirms payment -- see
-            // src/app/api/webhooks/stripe/route.ts for the transition
-            // to CONFIRMED. KNOWN GAP: an abandoned Checkout leaves this
-            // slot blocked as PENDING indefinitely -- there's no
-            // stale-booking expiry job yet. Worth adding before launch.
             status: collectsDeposit ? "PENDING" : "CONFIRMED",
             depositAmountCents,
             depositPaid: false,
@@ -99,13 +115,10 @@ export async function createBooking(stylistSlug: string, serviceId: string, slot
   }
 
   if (!collectsDeposit) {
+    await Promise.all([sendBookingConfirmationEmail(bookingId), sendBookingConfirmationSms(bookingId)]);
     redirect(`/${stylistSlug}/bookings/${bookingId}`);
   }
 
-  // Deposit required: the booking is already secured (PENDING) at this
-  // point -- Checkout just collects payment. The webhook, not this
-  // redirect, is what actually confirms the booking; a customer could
-  // navigate to success_url without paying, so nothing here trusts that.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const checkoutSession = await stripe.checkout.sessions.create({
     mode: "payment",

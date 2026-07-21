@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { getAvailableSlots } from "@/lib/availability";
 import { createBooking } from "./actions";
+import { getCurrentCustomer } from "@/lib/current-customer";
 
 export default async function ConfirmBookingPage({
   params,
@@ -46,6 +47,7 @@ export default async function ConfirmBookingPage({
   const localDateTime = format(toZonedTime(apptStart, stylist.timezone), "EEEE, MMMM d 'at' h:mm a");
   const depositCents = Math.round((service.priceCents * service.depositPercentage) / 100);
 
+  const customer = await getCurrentCustomer();
   const confirmBookingWithContext = createBooking.bind(null, stylistSlug, serviceId, slot);
 
   return (
@@ -71,7 +73,31 @@ export default async function ConfirmBookingPage({
           Sorry, this time is no longer available. Please go back and pick another slot.
         </p>
       ) : (
-        <form action={confirmBookingWithContext} className="mt-6">
+        <form action={confirmBookingWithContext} className="mt-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium">Phone number</label>
+            <input
+              type="tel"
+              name="phone"
+              defaultValue={customer?.phone ?? ""}
+              placeholder="(902) 555-0123"
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <label className="flex items-start gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              name="smsOptIn"
+              defaultChecked={customer?.smsOptIn ?? false}
+              className="mt-0.5"
+            />
+            <span>
+              Text me a confirmation and reminders about this appointment. Message and data
+              rates may apply.
+            </span>
+          </label>
+
           <button
             type="submit"
             className="w-full rounded-md bg-black px-4 py-2 text-sm font-medium text-white"

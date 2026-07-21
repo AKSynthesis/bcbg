@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { sendBookingConfirmationEmail } from "@/lib/send-booking-confirmation";
+import { sendBookingConfirmationSms } from "@/lib/send-booking-confirmation-sms";
 
 export async function POST(request: NextRequest) {
   const signature = request.headers.get("stripe-signature");
@@ -52,8 +53,11 @@ export async function POST(request: NextRequest) {
       // email if THIS call is what actually flipped the booking to
       // CONFIRMED (count > 0) -- otherwise a re-delivered webhook for an
       // already-confirmed booking would send a duplicate confirmation.
-      if (result.count > 0) {
-        await sendBookingConfirmationEmail(bookingId);
+        if (result.count > 0) {
+        await Promise.all([
+          sendBookingConfirmationEmail(bookingId),
+          sendBookingConfirmationSms(bookingId),
+        ]);
       }
       break;
     }
